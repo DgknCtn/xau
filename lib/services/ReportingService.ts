@@ -3,13 +3,15 @@ import { Transaction, ReportFilter } from '@/lib/types'
 import { PnLService } from './PnLService'
 import * as XLSX from 'xlsx'
 
+import { formatCurrencyTRY, formatQuantity, formatDateOnly } from '@/lib/utils/format'
+
 export interface ReportRow {
     Tarih: string
     Varlık: string
     'İşlem Tipi': string
-    Miktar: number
-    'Birim Fiyat (TL)': number
-    'Toplam Tutar (TL)': number
+    Miktar: string
+    'Birim Fiyat (TL)': string
+    'Toplam Tutar (TL)': string
     Not: string
 }
 
@@ -40,14 +42,14 @@ export class ReportingService {
         return (data || []) as Transaction[]
     }
 
-    formatForExport(transactions: Transaction[]): ReportRow[] {
+    formatForExport(transactions: Transaction[]): object[] {
         return transactions.map((tx) => ({
-            Tarih: tx.transaction_date,
+            Tarih: formatDateOnly(tx.transaction_date),
             Varlık: tx.asset_types?.name ?? '',
             'İşlem Tipi': tx.transaction_type === 'buy' ? 'Alış' : 'Satış',
-            Miktar: Number(tx.quantity),
-            'Birim Fiyat (TL)': Number(tx.unit_price),
-            'Toplam Tutar (TL)': Number(tx.total_amount),
+            Miktar: formatQuantity(Number(tx.quantity), tx.asset_types?.unit_type || 'adet'),
+            'Birim Fiyat': formatCurrencyTRY(Number(tx.unit_price)),
+            'Toplam Tutar': formatCurrencyTRY(Number(tx.total_amount)),
             Not: tx.note ?? '',
         }))
     }

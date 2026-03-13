@@ -7,12 +7,8 @@ import { TransactionService } from '@/lib/services/TransactionService'
 import { PricingService } from '@/lib/services/PricingService'
 import { Transaction, AssetType, ReportFilter } from '@/lib/types'
 import DashboardLayout from '@/app/layout-dashboard'
-import { Download, Filter, FileSpreadsheet } from 'lucide-react'
-import { format } from 'date-fns'
-
-function formatTL(n: number) {
-    return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n)
-}
+import { Download, Filter, FileSpreadsheet, Inbox } from 'lucide-react'
+import { formatCurrencyTRY, formatQuantity, formatDateOnly } from '@/lib/utils/format'
 
 const QUICK_PERIODS = [
     { label: 'Son 7 Gün', value: '7d' },
@@ -71,6 +67,28 @@ export default function ReportsPage() {
     const totalSell = transactions
         .filter((t) => t.transaction_type === 'sell')
         .reduce((s, t) => s + Number(t.total_amount), 0)
+        
+    const netVolume = totalBuy - totalSell
+
+    // En çok işlem gören varlığı bulma
+    const assetVolumes: Record<string, { name: string; volume: number }> = {}
+    transactions.forEach(t => {
+        const id = t.asset_type_id
+        const name = t.asset_types?.name || 'Bilinmiyor'
+        if (!assetVolumes[id]) {
+            assetVolumes[id] = { name, volume: 0 }
+        }
+        assetVolumes[id].volume += Number(t.total_amount)
+    })
+    
+    let mostActiveAsset = '—'
+    let maxVol = 0
+    Object.values(assetVolumes).forEach(a => {
+        if (a.volume > maxVol) {
+            maxVol = a.volume
+            mostActiveAsset = a.name
+        }
+    })
 
     return (
         <DashboardLayout>
@@ -78,22 +96,28 @@ export default function ReportsPage() {
                 <div className="flex items-center justify-between mb-6">
                     <h1 className="text-2xl font-bold text-white">Raporlar</h1>
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => reportingService.exportToCSV(transactions)}
-                            disabled={transactions.length === 0}
-                            className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-sm rounded-xl transition-all disabled:opacity-40"
-                        >
-                            <Download className="w-4 h-4" />
-                            CSV
-                        </button>
-                        <button
-                            onClick={() => reportingService.exportToExcel(transactions)}
-                            disabled={transactions.length === 0}
-                            className="flex items-center gap-2 px-3 py-2 bg-emerald-800/50 hover:bg-emerald-700/50 border border-emerald-700 text-emerald-300 text-sm rounded-xl transition-all disabled:opacity-40"
-                        >
-                            <FileSpreadsheet className="w-4 h-4" />
-                            Excel
-                        </button>
+                        <div className="flex flex-col items-center">
+                            <button
+                                onClick={() => reportingService.exportToCSV(transactions)}
+                                disabled={transactions.length === 0}
+                                title="Filtrelenmiş işlemleri evrensel CSV formatında indir"
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-sm rounded-xl transition-all disabled:opacity-40"
+                            >
+                                <Download className="w-4 h-4" />
+                                CSV İndir
+                            </button>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <button
+                                onClick={() => reportingService.exportToExcel(transactions)}
+                                disabled={transactions.length === 0}
+                                title="Filtrelenmiş işlemleri okunabilir Excel dosyası (.xlsx) olarak indir"
+                                className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-800/50 hover:bg-emerald-700/50 border border-emerald-700 text-emerald-300 text-sm rounded-xl transition-all disabled:opacity-40"
+                            >
+                                <FileSpreadsheet className="w-4 h-4" />
+                                Excel İndir
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -164,16 +188,26 @@ export default function ReportsPage() {
                 </div>
 
                 {/* Özet satırı */}
-                <div className="grid grid-cols-3 gap-4 mb-5">
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
                         <p className="text-xs text-gray-500 mb-1">Toplam Alış</p>
-                        <p className="text-lg font-bold text-white">{formatTL(totalBuy)}</p>
+                        <p className="text-lg font-bold text-emerald-400">{formatCurrencyTRY(totalBuy)}</p>
                     </div>
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
                         <p className="text-xs text-gray-500 mb-1">Toplam Satış</p>
-                        <p className="text-lg font-bold text-white">{formatTL(totalSell)}</p>
+                        <p className="text-lg font-bold text-red-400">{formatCurrencyTRY(totalSell)}</p>
                     </div>
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
+                        <p className="text-xs text-gray-500 mb-1">Net Hacim</p>
+                        <p className={`text-lg font-bold ${netVolume > 0 ? 'text-emerald-400' : netVolume < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                            {formatCurrencyTRY(netVolume)}
+                        </p>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
+                        <p className="text-xs text-gray-500 mb-1">En Çok İşlem Gören</p>
+                        <p className="text-lg font-bold text-white truncate" title={mostActiveAsset}>{mostActiveAsset}</p>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
                         <p className="text-xs text-gray-500 mb-1">İşlem Sayısı</p>
                         <p className="text-lg font-bold text-white">{transactions.length}</p>
                     </div>
@@ -184,7 +218,15 @@ export default function ReportsPage() {
                     {loading ? (
                         <div className="flex items-center justify-center h-40 text-gray-500 text-sm">Yükleniyor...</div>
                     ) : transactions.length === 0 ? (
-                        <div className="flex items-center justify-center h-40 text-gray-400 text-sm">Bu tarih aralığında işlem bulunamadı</div>
+                        <div className="flex flex-col items-center justify-center py-16 text-center">
+                            <div className="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                                <Inbox className="w-6 h-6 text-gray-500" />
+                            </div>
+                            <h3 className="text-lg font-medium text-white mb-1">Rapor Boş</h3>
+                            <p className="text-gray-400 text-sm mb-6 max-w-sm">
+                                Seçtiğiniz filtreleme aralığında hiçbir işleme rastlanmadı. Tarih aralığını değiştirmeyi deneyin.
+                            </p>
+                        </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
@@ -199,7 +241,7 @@ export default function ReportsPage() {
                                     {transactions.map((tx) => (
                                         <tr key={tx.id} className="hover:bg-gray-800/30 transition-colors">
                                             <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                                                {format(new Date(tx.transaction_date), 'dd.MM.yyyy')}
+                                                {formatDateOnly(tx.transaction_date)}
                                             </td>
                                             <td className="px-4 py-3 text-white">{tx.asset_types?.name ?? '—'}</td>
                                             <td className="px-4 py-3">
@@ -210,9 +252,9 @@ export default function ReportsPage() {
                                                     {tx.transaction_type === 'buy' ? 'Alış' : 'Satış'}
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 text-gray-300">{Number(tx.quantity).toFixed(4)}</td>
-                                            <td className="px-4 py-3 text-gray-300">{formatTL(Number(tx.unit_price))}</td>
-                                            <td className="px-4 py-3 text-white font-medium">{formatTL(Number(tx.total_amount))}</td>
+                                            <td className="px-4 py-3 text-gray-300">{formatQuantity(Number(tx.quantity), tx.asset_types?.unit_type || 'adet')}</td>
+                                            <td className="px-4 py-3 text-gray-300">{formatCurrencyTRY(Number(tx.unit_price))}</td>
+                                            <td className="px-4 py-3 text-white font-medium">{formatCurrencyTRY(Number(tx.total_amount))}</td>
                                             <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{tx.note ?? '—'}</td>
                                         </tr>
                                     ))}

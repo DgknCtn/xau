@@ -13,6 +13,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { useToast } from '@/components/ui/Toast'
 
 const schema = z.object({
     asset_type_id: z.string().min(1, 'Varlık seçiniz'),
@@ -33,7 +34,7 @@ export default function EditTransactionPage() {
     const [assetTypes, setAssetTypes] = useState<AssetType[]>([])
     const [loading, setLoading] = useState(false)
     const [loadingTx, setLoadingTx] = useState(true)
-    const [serverError, setServerError] = useState<string | null>(null)
+    const { showToast } = useToast()
     const supabase = createClient()
 
     const {
@@ -63,7 +64,7 @@ export default function EditTransactionPage() {
                     transaction_type: tx.transaction_type,
                     quantity: Number(tx.quantity),
                     unit_price: Number(tx.unit_price),
-                    transaction_date: tx.transaction_date,
+                    transaction_date: tx.transaction_date ? format(new Date(tx.transaction_date), "yyyy-MM-dd'T'HH:mm") : '',
                     note: tx.note ?? '',
                 })
             }
@@ -73,13 +74,13 @@ export default function EditTransactionPage() {
 
     const onSubmit = async (values: FormValues) => {
         setLoading(true)
-        setServerError(null)
         const txService = new TransactionService(supabase)
         try {
             await txService.updateTransaction(id, values as TransactionFormData)
+            showToast('İşlem başarıyla güncellendi!', 'success')
             router.push('/transactions')
         } catch (e: unknown) {
-            setServerError(e instanceof Error ? e.message : 'Bir hata oluştu')
+            showToast(e instanceof Error ? e.message : 'Bir hata oluştu', 'error')
             setLoading(false)
         }
     }
@@ -101,12 +102,6 @@ export default function EditTransactionPage() {
                     </Link>
                     <h1 className="text-2xl font-bold text-white">İşlemi Düzenle</h1>
                 </div>
-
-                {serverError && (
-                    <div className="mb-5 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-                        {serverError}
-                    </div>
-                )}
 
                 {loadingTx ? (
                     <div className="flex items-center justify-center h-40 text-gray-500 text-sm">
@@ -194,9 +189,9 @@ export default function EditTransactionPage() {
 
                         {/* Tarih */}
                         <div>
-                            <label className={labelCls}>İşlem Tarihi</label>
+                            <label className={labelCls}>İşlem Zamanı</label>
                             <input
-                                type="date"
+                                type="datetime-local"
                                 {...register('transaction_date')}
                                 className={inputCls}
                             />

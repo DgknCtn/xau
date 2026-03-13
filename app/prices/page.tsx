@@ -8,6 +8,8 @@ import DashboardLayout from '@/app/layout-dashboard'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
+import { formatCurrencyTRY, formatDateTime } from '@/lib/utils/format'
+import { useToast } from '@/components/ui/Toast'
 
 interface PriceEntry {
     asset_type_id: string
@@ -22,8 +24,7 @@ export default function PricesPage() {
     const [latestPrices, setLatestPrices] = useState<Record<string, { buy: number | null; sell: number | null; timestamp: string | null }>>({})
     const [loading, setLoading] = useState(false)
     const [syncing, setSyncing] = useState(false)
-    const [success, setSuccess] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+    const { showToast } = useToast()
     const supabase = createClient()
     const pricingService = new PricingService(supabase)
 
@@ -70,18 +71,15 @@ export default function PricesPage() {
 
     const handleSync = async () => {
         setSyncing(true)
-        setError(null)
-        setSuccess(false)
         try {
             const res = await fetch('/api/prices/sync', { method: 'POST' })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error || 'API senkronizasyonu başarısız oldu')
             
             await load() // Tabloyu yenile
-            setSuccess(true)
-            setTimeout(() => setSuccess(false), 3000)
+            showToast("Fiyatlar API'den güncellendi", 'success')
         } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : 'Bir hata oluştu')
+            showToast(e instanceof Error ? e.message : 'API çekme hatası oluştu', 'error')
         } finally {
             setSyncing(false)
         }
@@ -89,8 +87,6 @@ export default function PricesPage() {
 
     const handleSave = async () => {
         setLoading(true)
-        setError(null)
-        setSuccess(false)
         try {
             const entries = Object.values(prices)
                 .filter((p) => p.buy_price || p.sell_price)
@@ -101,27 +97,25 @@ export default function PricesPage() {
                 }))
 
             if (entries.length === 0) {
-                setError('En az bir varlık için fiyat girmeniz gerekiyor.')
+                showToast('En az bir varlık için fiyat girmeniz gerekiyor.', 'error')
                 return
             }
 
             await pricingService.saveManualPrices(entries)
-            setSuccess(true)
+            showToast('Fiyatlar başarıyla kaydedildi!', 'success')
             setTimeout(() => router.push('/'), 1500)
         } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : 'Fiyatlar kaydedilemedi')
+            showToast(e instanceof Error ? e.message : 'Fiyatlar kaydedilemedi', 'error')
         } finally {
             setLoading(false)
         }
     }
 
-    const formatTL = (n: number | null) =>
-        n != null ? new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2 }).format(n) + ' ₺' : '—'
-
-    const formatTime = (ts: string | null) => {
-        if (!ts) return null
-        return new Date(ts).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-    }
+    const hasUnsavedChanges = Object.keys(prices).some((id) => {
+        const initBuy = latestPrices[id]?.buy?.toString() ?? ''
+        const initSell = latestPrices[id]?.sell?.toString() ?? ''
+        return prices[id].buy_price !== initBuy || prices[id].sell_price !== initSell
+    })
 
     const goldAssets = assetTypes.filter((a) => a.category === 'gold')
     const fxAssets = assetTypes.filter((a) => a.category === 'fx')
@@ -150,12 +144,12 @@ export default function PricesPage() {
                                     <div>
                                         <p className="text-white text-sm font-medium">{a.name}</p>
                                         {latest?.timestamp && (
-                                            <p className="text-gray-600 text-xs mt-0.5">{formatTime(latest.timestamp)}</p>
+                                            <p className="text-gray-600 text-xs mt-0.5">{formatDateTime(latest.timestamp)}</p>
                                         )}
                                     </div>
                                 </div>
                                 <div key={`last-${a.id}`} className="px-3 py-3 border-t border-gray-800 flex items-center justify-end">
-                                    <span className="text-gray-400 text-sm">{formatTL(latest?.buy ?? null)}</span>
+                                    <span className="text-gray-400 text-sm">{formatCurrencyTRY(latest?.buy ?? null)}</span>
                                 </div>
                                 <div key={`buy-${a.id}`} className="px-3 py-3 border-t border-gray-800">
                                     <input
@@ -214,19 +208,7 @@ export default function PricesPage() {
                     </button>
                 </div>
 
-                {error && (
-                    <div className="mb-5 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-sm">
-                        <AlertCircle className="w-4 h-4 shrink-0" />
-                        {error}
-                    </div>
-                )}
-
-                {success && (
-                    <div className="mb-5 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2 text-emerald-400 text-sm">
-                        <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        Fiyatlar kaydedildi! Dashboard'a yönlendiriliyorsunuz...
-                    </div>
-                )}
+                {/* Silinen hata ve başarı kutuları */}
 
                 {renderAssetGroup(goldAssets, 'Altın')}
                 {renderAssetGroup(fxAssets, 'Döviz')}
@@ -234,11 +216,11 @@ export default function PricesPage() {
                 {/* Kaydet */}
                 <button
                     onClick={handleSave}
-                    disabled={loading || success}
+                    disabled={loading || !hasUnsavedChanges}
                     className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-gray-900 font-semibold py-3 rounded-xl transition-all disabled:opacity-50"
                 >
                     <Save className="w-4 h-4" />
-                    {loading ? 'Kaydediliyor...' : 'Fiyatları Kaydet'}
+                    {loading ? 'Kaydediliyor...' : hasUnsavedChanges ? 'Kaydet (Değişiklikler var)' : 'Değişiklik Yok'}
                 </button>
             </div>
         </DashboardLayout>

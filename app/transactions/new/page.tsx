@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { useToast } from '@/components/ui/Toast'
 
 // z.number() ile useForm<FormValues> tam tip uyumu — valueAsNumber kullanılarak
 const schema = z.object({
@@ -30,7 +31,7 @@ export default function NewTransactionPage() {
     const router = useRouter()
     const [assetTypes, setAssetTypes] = useState<AssetType[]>([])
     const [loading, setLoading] = useState(false)
-    const [serverError, setServerError] = useState<string | null>(null)
+    const { showToast } = useToast()
     const supabase = createClient()
 
     const {
@@ -42,7 +43,7 @@ export default function NewTransactionPage() {
         resolver: zodResolver(schema),
         defaultValues: {
             transaction_type: 'buy',
-            transaction_date: format(new Date(), 'yyyy-MM-dd'),
+            transaction_date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
         },
     })
 
@@ -55,13 +56,13 @@ export default function NewTransactionPage() {
 
     const onSubmit = async (values: FormValues) => {
         setLoading(true)
-        setServerError(null)
         const txService = new TransactionService(supabase)
         try {
             await txService.createTransaction(values as TransactionFormData)
+            showToast('İşlem başarıyla eklendi!', 'success')
             router.push('/transactions')
         } catch (e: unknown) {
-            setServerError(e instanceof Error ? e.message : 'Bir hata oluştu')
+            showToast(e instanceof Error ? e.message : 'Bir hata oluştu', 'error')
             setLoading(false)
         }
     }
@@ -85,11 +86,7 @@ export default function NewTransactionPage() {
                     <h1 className="text-2xl font-bold text-white">Yeni İşlem</h1>
                 </div>
 
-                {serverError && (
-                    <div className="mb-5 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-                        {serverError}
-                    </div>
-                )}
+                {/* Başlık */}
 
                 <form onSubmit={handleSubmit(onSubmit)} className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
                     {/* İşlem Tipi */}
@@ -164,8 +161,8 @@ export default function NewTransactionPage() {
 
                     {/* Tarih */}
                     <div>
-                        <label className={labelCls}>İşlem Tarihi</label>
-                        <input type="date" {...register('transaction_date')} className={inputCls} />
+                        <label className={labelCls}>İşlem Zamanı</label>
+                        <input type="datetime-local" {...register('transaction_date')} className={inputCls} />
                         {errors.transaction_date && (
                             <p className={errCls}>{errors.transaction_date.message}</p>
                         )}

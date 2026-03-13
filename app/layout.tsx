@@ -9,10 +9,14 @@ export const metadata: Metadata = {
   description: 'Kişisel fiziki altın ve döviz portföy takip uygulaması',
 }
 
+import { ToastProvider } from '@/components/ui/Toast'
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="tr" className="dark">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   )
 }
