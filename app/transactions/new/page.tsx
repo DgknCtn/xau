@@ -10,108 +10,91 @@ import { PricingService } from '@/lib/services/PricingService'
 import { AssetType, TransactionFormData } from '@/lib/types'
 import DashboardLayout from '@/app/layout-dashboard'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, TrendingUp, TrendingDown } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { useToast } from '@/components/ui/Toast'
 
-// z.number() ile useForm<FormValues> tam tip uyumu — valueAsNumber kullanılarak
 const schema = z.object({
-    asset_type_id: z.string().min(1, 'Varlık seçiniz'),
-    transaction_type: z.enum(['buy', 'sell']),
-    quantity: z.number().positive('Miktar 0\'dan büyük olmalı'),
-    unit_price: z.number().min(0, 'Fiyat negatif olamaz'),
-    transaction_date: z.string().min(1, 'Tarih seçiniz'),
-    note: z.string().optional(),
+    asset_type_id:    z.string().min(1,'Varlık seçiniz'),
+    transaction_type: z.enum(['buy','sell']),
+    quantity:         z.number().positive('Miktar 0\'dan büyük olmalı'),
+    unit_price:       z.number().min(0,'Fiyat negatif olamaz'),
+    transaction_date: z.string().min(1,'Tarih seçiniz'),
+    note:             z.string().optional(),
 })
-
-type FormValues = z.infer<typeof schema>
+type FV = z.infer<typeof schema>
 
 export default function NewTransactionPage() {
     const router = useRouter()
     const [assetTypes, setAssetTypes] = useState<AssetType[]>([])
-    const [loading, setLoading] = useState(false)
+    const [loading, setLoading]       = useState(false)
     const { showToast } = useToast()
     const supabase = createClient()
 
-    const {
-        register,
-        handleSubmit,
-        watch,
-        formState: { errors },
-    } = useForm<FormValues>({
+    const { register, handleSubmit, watch, formState: { errors } } = useForm<FV>({
         resolver: zodResolver(schema),
-        defaultValues: {
-            transaction_type: 'buy',
-            transaction_date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-        },
+        defaultValues: { transaction_type:'buy', transaction_date: format(new Date(),"yyyy-MM-dd'T'HH:mm") },
     })
 
     const txType = watch('transaction_type')
+    const qty    = watch('quantity')
+    const price  = watch('unit_price')
+    const total  = qty && price && !isNaN(qty) && !isNaN(price) ? qty * price : null
 
-    useEffect(() => {
-        const pricingService = new PricingService(supabase)
-        pricingService.getAssetTypes().then(setAssetTypes)
-    }, [])
+    useEffect(() => { new PricingService(supabase).getAssetTypes().then(setAssetTypes) }, [])
 
-    const onSubmit = async (values: FormValues) => {
+    const onSubmit = async (v: FV) => {
         setLoading(true)
-        const txService = new TransactionService(supabase)
         try {
-            await txService.createTransaction(values as TransactionFormData)
-            showToast('İşlem başarıyla eklendi!', 'success')
+            await new TransactionService(supabase).createTransaction(v as TransactionFormData)
+            showToast('İşlem başarıyla eklendi!','success')
             router.push('/transactions')
         } catch (e: unknown) {
-            showToast(e instanceof Error ? e.message : 'Bir hata oluştu', 'error')
+            showToast(e instanceof Error ? e.message : 'Bir hata oluştu','error')
             setLoading(false)
         }
     }
 
-    const inputCls =
-        'w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-3 text-sm placeholder:text-gray-600 focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-all'
-    const errCls = 'text-red-400 text-xs mt-1'
-    const labelCls = 'block text-sm text-gray-400 mb-1.5'
+    const label = (txt: string) => (
+        <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color:'var(--t3)' }}>{txt}</p>
+    )
+    const err = (msg?: string) => msg
+        ? <p className="text-xs mt-1.5 font-medium" style={{ color:'var(--red)' }}>{msg}</p>
+        : null
 
     return (
         <DashboardLayout>
-            <div className="p-6 max-w-2xl">
-                {/* Başlık */}
-                <div className="flex items-center gap-3 mb-6">
-                    <Link
-                        href="/transactions"
-                        className="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-all"
-                    >
+            <div className="p-6 max-w-xl fade-in">
+
+                {/* Header */}
+                <div className="flex items-center gap-3 mb-7">
+                    <Link href="/transactions" className="btn btn-ghost p-2.5">
                         <ArrowLeft className="w-4 h-4" />
                     </Link>
-                    <h1 className="text-2xl font-bold text-white">Yeni İşlem</h1>
+                    <div>
+                        <h1 className="text-xl font-bold" style={{ color:'var(--t1)' }}>Yeni İşlem</h1>
+                        <p className="text-xs mt-0.5" style={{ color:'var(--t3)' }}>Alış veya satış kaydı ekle</p>
+                    </div>
                 </div>
 
-                {/* Başlık */}
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
 
-                <form onSubmit={handleSubmit(onSubmit)} className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-5">
-                    {/* İşlem Tipi */}
-                    <div>
-                        <label className={labelCls}>İşlem Tipi</label>
-                        <div className="flex gap-2">
+                    {/* İşlem tipi */}
+                    <div className="card p-5">
+                        {label('İşlem Tipi')}
+                        <div className="grid grid-cols-2 gap-3">
                             {[
-                                { v: 'buy', l: 'Alış' },
-                                { v: 'sell', l: 'Satış' },
-                            ].map(({ v, l }) => (
-                                <label
-                                    key={v}
-                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border cursor-pointer text-sm font-medium transition-all ${txType === v
-                                            ? v === 'buy'
-                                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                                                : 'bg-red-500/10 border-red-500/30 text-red-400'
-                                            : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
-                                        }`}
-                                >
-                                    <input
-                                        type="radio"
-                                        value={v}
-                                        {...register('transaction_type')}
-                                        className="sr-only"
-                                    />
+                                { v:'buy',  l:'Alış',  icon:TrendingUp,   bg:'var(--green-dim)',  color:'#34D399', border:'rgba(16,185,129,0.3)',  activeBg:'rgba(16,185,129,0.18)' },
+                                { v:'sell', l:'Satış', icon:TrendingDown, bg:'var(--red-dim)',    color:'var(--red)', border:'rgba(248,113,113,0.3)', activeBg:'rgba(248,113,113,0.18)' },
+                            ].map(({ v, l, icon:Icon, bg, color, border, activeBg }) => (
+                                <label key={v}
+                                       className="flex items-center justify-center gap-2.5 py-4 rounded-2xl border-2 cursor-pointer font-bold text-sm transition-all"
+                                       style={txType===v
+                                           ? { background:activeBg, borderColor:border, color }
+                                           : { background:'var(--bg-3)', borderColor:'var(--border-2)', color:'var(--t4)' }}>
+                                    <input type="radio" value={v} {...register('transaction_type')} className="sr-only" />
+                                    <Icon className="w-4 h-4" />
                                     {l}
                                 </label>
                             ))}
@@ -119,74 +102,62 @@ export default function NewTransactionPage() {
                     </div>
 
                     {/* Varlık */}
-                    <div>
-                        <label className={labelCls}>Varlık</label>
-                        <select {...register('asset_type_id')} className={inputCls}>
+                    <div className="card p-5">
+                        {label('Varlık')}
+                        <select {...register('asset_type_id')} className="inp">
                             <option value="">— Seçiniz —</option>
-                            {assetTypes.map((a) => (
-                                <option key={a.id} value={a.id}>
-                                    {a.name}
-                                </option>
-                            ))}
+                            {assetTypes.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
                         </select>
-                        {errors.asset_type_id && <p className={errCls}>{errors.asset_type_id.message}</p>}
+                        {err(errors.asset_type_id?.message)}
                     </div>
 
-                    {/* Miktar + Birim Fiyat */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className={labelCls}>Miktar</label>
-                            {/* valueAsNumber ensures the form value is a number, matching z.number() */}
-                            <input
-                                type="number"
-                                step="any"
-                                {...register('quantity', { valueAsNumber: true })}
-                                placeholder="0.000"
-                                className={inputCls}
-                            />
-                            {errors.quantity && <p className={errCls}>{errors.quantity.message}</p>}
+                    {/* Miktar + Fiyat */}
+                    <div className="card p-5">
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                                {label('Miktar')}
+                                <input type="number" step="any" placeholder="0.000"
+                                       {...register('quantity',{ valueAsNumber:true })} className="inp" />
+                                {err(errors.quantity?.message)}
+                            </div>
+                            <div>
+                                {label('Birim Fiyat (₺)')}
+                                <input type="number" step="any" placeholder="0.00"
+                                       {...register('unit_price',{ valueAsNumber:true })} className="inp" />
+                                {err(errors.unit_price?.message)}
+                            </div>
                         </div>
-                        <div>
-                            <label className={labelCls}>Birim Fiyat (TL)</label>
-                            <input
-                                type="number"
-                                step="any"
-                                {...register('unit_price', { valueAsNumber: true })}
-                                placeholder="0.00"
-                                className={inputCls}
-                            />
-                            {errors.unit_price && <p className={errCls}>{errors.unit_price.message}</p>}
-                        </div>
-                    </div>
 
-                    {/* Tarih */}
-                    <div>
-                        <label className={labelCls}>İşlem Zamanı</label>
-                        <input type="datetime-local" {...register('transaction_date')} className={inputCls} />
-                        {errors.transaction_date && (
-                            <p className={errCls}>{errors.transaction_date.message}</p>
+                        {total !== null && (
+                            <div className="flex items-center justify-between p-3.5 rounded-xl"
+                                 style={{ background:'var(--gold-dim)', border:'1px solid rgba(245,158,11,0.2)' }}>
+                                <span className="text-xs font-bold uppercase tracking-wider" style={{ color:'var(--gold)' }}>Toplam Tutar</span>
+                                <span className="text-lg font-black" style={{ color:'var(--gold-2)' }}>
+                                    {new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY'}).format(total)}
+                                </span>
+                            </div>
                         )}
                     </div>
 
-                    {/* Not */}
-                    <div>
-                        <label className={labelCls}>Not (opsiyonel)</label>
-                        <textarea
-                            {...register('note')}
-                            placeholder="Kuyumcu adı, açıklama..."
-                            rows={2}
-                            className={`${inputCls} resize-none`}
-                        />
+                    {/* Tarih + Not */}
+                    <div className="card p-5 space-y-4">
+                        <div>
+                            {label('İşlem Zamanı')}
+                            <input type="datetime-local" {...register('transaction_date')} className="inp" />
+                            {err(errors.transaction_date?.message)}
+                        </div>
+                        <div>
+                            {label('Not (opsiyonel)')}
+                            <textarea {...register('note')} rows={2} placeholder="Kuyumcu adı, açıklama..."
+                                      className="inp resize-none" />
+                        </div>
                     </div>
 
-                    {/* Buton */}
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-gray-900 font-semibold py-3 rounded-xl transition-all disabled:opacity-50"
-                    >
-                        <Save className="w-4 h-4" />
-                        {loading ? 'Kaydediliyor...' : 'İşlemi Kaydet'}
+                    <button type="submit" disabled={loading} className="btn btn-gold w-full py-3"
+                            style={{ opacity: loading ? 0.7 : 1 }}>
+                        {loading
+                            ? <><span className="spin inline-block w-4 h-4 rounded-full border-2 border-current border-t-transparent"/>Kaydediliyor...</>
+                            : <><Save className="w-4 h-4"/>İşlemi Kaydet</>}
                     </button>
                 </form>
             </div>

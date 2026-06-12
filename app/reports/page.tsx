@@ -3,259 +3,169 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ReportingService } from '@/lib/services/ReportingService'
-import { TransactionService } from '@/lib/services/TransactionService'
 import { PricingService } from '@/lib/services/PricingService'
 import { Transaction, AssetType, ReportFilter } from '@/lib/types'
 import DashboardLayout from '@/app/layout-dashboard'
-import { Download, Filter, FileSpreadsheet, Inbox } from 'lucide-react'
+import { Download, FileSpreadsheet, Inbox, TrendingUp, TrendingDown, Activity, Hash, BarChart2 } from 'lucide-react'
 import { formatCurrencyTRY, formatQuantity, formatDateOnly } from '@/lib/utils/format'
 
-const QUICK_PERIODS = [
-    { label: 'Son 7 Gün', value: '7d' },
-    { label: 'Son 30 Gün', value: '30d' },
-    { label: 'Son 90 Gün', value: '90d' },
-    { label: 'Yıl Başından', value: 'ytd' },
+const PERIODS = [
+    { l:'7G',    v:'7d'  },
+    { l:'30G',   v:'30d' },
+    { l:'90G',   v:'90d' },
+    { l:'Bu Yıl',v:'ytd' },
 ] as const
 
 export default function ReportsPage() {
     const [transactions, setTransactions] = useState<Transaction[]>([])
-    const [assetTypes, setAssetTypes] = useState<AssetType[]>([])
-    const [loading, setLoading] = useState(false)
-    const [activePeriod, setActivePeriod] = useState<'7d' | '30d' | '90d' | 'ytd'>('30d')
+    const [assetTypes, setAssetTypes]     = useState<AssetType[]>([])
+    const [loading, setLoading]           = useState(false)
+    const [period, setPeriod]             = useState<'7d'|'30d'|'90d'|'ytd'>('30d')
     const [filter, setFilter] = useState<ReportFilter>(() => {
-        const d = new Date()
-        const end = d.toISOString().split('T')[0]
-        d.setDate(d.getDate() - 30)
-        return { start_date: d.toISOString().split('T')[0], end_date: end }
+        const d=new Date(), end=d.toISOString().split('T')[0]
+        d.setDate(d.getDate()-30)
+        return { start_date:d.toISOString().split('T')[0], end_date:end }
     })
-    const [assetFilter, setAssetFilter] = useState('')
-    const [txTypeFilter, setTxTypeFilter] = useState<'' | 'buy' | 'sell'>('')
+    const [assetF, setAssetF] = useState('')
+    const [typeF,  setTypeF]  = useState<''|'buy'|'sell'>('')
 
     const supabase = createClient()
-    const reportingService = new ReportingService(supabase)
-    const pricingService = new PricingService(supabase)
+    const rs = new ReportingService(supabase)
+    const ps = new PricingService(supabase)
 
-    useEffect(() => {
-        pricingService.getAssetTypes().then(setAssetTypes)
-    }, [])
+    useEffect(() => { ps.getAssetTypes().then(setAssetTypes) }, [])
 
     const loadReport = async () => {
         setLoading(true)
         try {
-            const data = await reportingService.getTransactionReport({
-                ...filter,
-                asset_type_id: assetFilter || undefined,
-                transaction_type: txTypeFilter || undefined,
-            } as ReportFilter)
-            setTransactions(data)
-        } finally {
-            setLoading(false)
-        }
+            setTransactions(await rs.getTransactionReport({ ...filter, asset_type_id:assetF||undefined, transaction_type:typeF||undefined } as ReportFilter))
+        } finally { setLoading(false) }
+    }
+    useEffect(() => { loadReport() }, [filter, assetF, typeF])
+
+    const handlePeriod = (v: typeof period) => {
+        const { start, end } = rs.getDateRange(v)
+        setPeriod(v); setFilter(f=>({...f, start_date:start, end_date:end}))
     }
 
-    useEffect(() => { loadReport() }, [filter, assetFilter, txTypeFilter])
+    const totalBuy  = transactions.filter(t=>t.transaction_type==='buy') .reduce((s,t)=>s+Number(t.total_amount),0)
+    const totalSell = transactions.filter(t=>t.transaction_type==='sell').reduce((s,t)=>s+Number(t.total_amount),0)
+    const net = totalBuy - totalSell
 
-    const handleQuickPeriod = (period: typeof activePeriod) => {
-        const { start, end } = reportingService.getDateRange(period)
-        setActivePeriod(period)
-        setFilter({ ...filter, start_date: start, end_date: end })
-    }
+    const volMap: Record<string,{name:string;vol:number}> = {}
+    transactions.forEach(t=>{ if(!volMap[t.asset_type_id]) volMap[t.asset_type_id]={name:t.asset_types?.name||'?',vol:0}; volMap[t.asset_type_id].vol+=Number(t.total_amount) })
+    let topAsset='—', maxVol=0
+    Object.values(volMap).forEach(a=>{ if(a.vol>maxVol){maxVol=a.vol;topAsset=a.name} })
 
-    const totalBuy = transactions
-        .filter((t) => t.transaction_type === 'buy')
-        .reduce((s, t) => s + Number(t.total_amount), 0)
-    const totalSell = transactions
-        .filter((t) => t.transaction_type === 'sell')
-        .reduce((s, t) => s + Number(t.total_amount), 0)
-        
-    const netVolume = totalBuy - totalSell
-
-    // En çok işlem gören varlığı bulma
-    const assetVolumes: Record<string, { name: string; volume: number }> = {}
-    transactions.forEach(t => {
-        const id = t.asset_type_id
-        const name = t.asset_types?.name || 'Bilinmiyor'
-        if (!assetVolumes[id]) {
-            assetVolumes[id] = { name, volume: 0 }
-        }
-        assetVolumes[id].volume += Number(t.total_amount)
-    })
-    
-    let mostActiveAsset = '—'
-    let maxVol = 0
-    Object.values(assetVolumes).forEach(a => {
-        if (a.volume > maxVol) {
-            maxVol = a.volume
-            mostActiveAsset = a.name
-        }
-    })
+    const kpis = [
+        { l:'Toplam Alış',   v:formatCurrencyTRY(totalBuy),  icon:TrendingUp,   color:'#34D399', glow:'rgba(16,185,129,0.2)',  bg:'linear-gradient(135deg,#10B981,#065F46)' },
+        { l:'Toplam Satış',  v:formatCurrencyTRY(totalSell), icon:TrendingDown, color:'var(--red)', glow:'rgba(248,113,113,0.2)', bg:'linear-gradient(135deg,#F87171,#991B1B)' },
+        { l:'Net Hacim',     v:formatCurrencyTRY(net),       icon:Activity,     color:net>0?'#34D399':net<0?'var(--red)':'var(--t3)', glow:'rgba(100,116,139,0.15)', bg:'linear-gradient(135deg,#64748B,#334155)' },
+        { l:'En Aktif',      v:topAsset,                     icon:BarChart2,    color:'var(--indigo)', glow:'rgba(129,140,248,0.2)', bg:'linear-gradient(135deg,#818CF8,#4F46E5)' },
+        { l:'İşlem Sayısı',  v:String(transactions.length),  icon:Hash,         color:'var(--gold-2)', glow:'rgba(245,158,11,0.2)', bg:'linear-gradient(135deg,#F59E0B,#92400E)' },
+    ]
 
     return (
         <DashboardLayout>
-            <div className="p-6 max-w-7xl">
+            <div className="p-6 max-w-7xl fade-in">
+
+                {/* Header */}
                 <div className="flex items-center justify-between mb-6">
-                    <h1 className="text-2xl font-bold text-white">Raporlar</h1>
+                    <div className="flex items-center gap-3">
+                        <div className="icon-chip" style={{ background:'linear-gradient(135deg,#F59E0B,#92400E)', boxShadow:'0 4px 14px rgba(245,158,11,0.3)' }}>
+                            <BarChart2 className="w-4 h-4 text-white" style={{width:18,height:18}}/>
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold" style={{ color:'var(--t1)' }}>Raporlar</h1>
+                            <p className="text-xs mt-0.5" style={{ color:'var(--t3)' }}>İşlem analizi ve dışa aktarım</p>
+                        </div>
+                    </div>
                     <div className="flex items-center gap-2">
-                        <div className="flex flex-col items-center">
-                            <button
-                                onClick={() => reportingService.exportToCSV(transactions)}
-                                disabled={transactions.length === 0}
-                                title="Filtrelenmiş işlemleri evrensel CSV formatında indir"
-                                className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-sm rounded-xl transition-all disabled:opacity-40"
-                            >
-                                <Download className="w-4 h-4" />
-                                CSV İndir
-                            </button>
-                        </div>
-                        <div className="flex flex-col items-center">
-                            <button
-                                onClick={() => reportingService.exportToExcel(transactions)}
-                                disabled={transactions.length === 0}
-                                title="Filtrelenmiş işlemleri okunabilir Excel dosyası (.xlsx) olarak indir"
-                                className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-800/50 hover:bg-emerald-700/50 border border-emerald-700 text-emerald-300 text-sm rounded-xl transition-all disabled:opacity-40"
-                            >
-                                <FileSpreadsheet className="w-4 h-4" />
-                                Excel İndir
-                            </button>
-                        </div>
+                        <button onClick={()=>rs.exportToCSV(transactions)} disabled={!transactions.length}
+                                className="btn btn-ghost text-xs py-2 px-3" style={{ opacity: !transactions.length ? 0.4 : 1 }}>
+                            <Download className="w-3.5 h-3.5"/> CSV
+                        </button>
+                        <button onClick={()=>rs.exportToExcel(transactions)} disabled={!transactions.length}
+                                className="btn btn-ghost text-xs py-2 px-3"
+                                style={{ opacity: !transactions.length ? 0.4 : 1, color:transactions.length?'#4ADE80':undefined }}>
+                            <FileSpreadsheet className="w-3.5 h-3.5"/> Excel
+                        </button>
                     </div>
                 </div>
 
-                {/* Filtreler */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-5 space-y-4">
-                    {/* Hızlı dönem seçimi */}
+                {/* Filters */}
+                <div className="card p-4 mb-5 space-y-4">
                     <div className="flex flex-wrap gap-2">
-                        {QUICK_PERIODS.map(({ label, value }) => (
-                            <button
-                                key={value}
-                                onClick={() => handleQuickPeriod(value)}
-                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${activePeriod === value
-                                        ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                                        : 'bg-gray-800 text-gray-400 border border-gray-700 hover:border-gray-600'
-                                    }`}
-                            >
-                                {label}
+                        {PERIODS.map(({ l, v }) => (
+                            <button key={v} onClick={()=>handlePeriod(v)}
+                                    className="px-4 py-1.5 rounded-xl text-xs font-bold transition-all"
+                                    style={period===v
+                                        ? { background:'var(--gold-dim)', color:'var(--gold-2)', border:'1px solid rgba(245,158,11,0.3)' }
+                                        : { background:'var(--bg-3)',     color:'var(--t4)',      border:'1px solid var(--border)' }}>
+                                {l}
                             </button>
                         ))}
                     </div>
-
-                    {/* Tarih aralığı */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div>
-                            <label className="block text-xs text-gray-500 mb-1">Başlangıç</label>
-                            <input
-                                type="date"
-                                value={filter.start_date}
-                                onChange={(e) => { setActivePeriod('30d'); setFilter((f) => ({ ...f, start_date: e.target.value })) }}
-                                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-yellow-500/50 transition-all"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-gray-500 mb-1">Bitiş</label>
-                            <input
-                                type="date"
-                                value={filter.end_date}
-                                onChange={(e) => { setActivePeriod('30d'); setFilter((f) => ({ ...f, end_date: e.target.value })) }}
-                                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-yellow-500/50 transition-all"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-gray-500 mb-1">Varlık</label>
-                            <select
-                                value={assetFilter}
-                                onChange={(e) => setAssetFilter(e.target.value)}
-                                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-yellow-500/50 transition-all"
-                            >
-                                <option value="">Tümü</option>
-                                {assetTypes.map((a) => (
-                                    <option key={a.id} value={a.id}>{a.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs text-gray-500 mb-1">İşlem Tipi</label>
-                            <select
-                                value={txTypeFilter}
-                                onChange={(e) => setTxTypeFilter(e.target.value as '' | 'buy' | 'sell')}
-                                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-yellow-500/50 transition-all"
-                            >
-                                <option value="">Tümü</option>
-                                <option value="buy">Alış</option>
-                                <option value="sell">Satış</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Özet satırı */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
-                        <p className="text-xs text-gray-500 mb-1">Toplam Alış</p>
-                        <p className="text-lg font-bold text-emerald-400">{formatCurrencyTRY(totalBuy)}</p>
-                    </div>
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
-                        <p className="text-xs text-gray-500 mb-1">Toplam Satış</p>
-                        <p className="text-lg font-bold text-red-400">{formatCurrencyTRY(totalSell)}</p>
-                    </div>
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
-                        <p className="text-xs text-gray-500 mb-1">Net Hacim</p>
-                        <p className={`text-lg font-bold ${netVolume > 0 ? 'text-emerald-400' : netVolume < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                            {formatCurrencyTRY(netVolume)}
-                        </p>
-                    </div>
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
-                        <p className="text-xs text-gray-500 mb-1">En Çok İşlem Gören</p>
-                        <p className="text-lg font-bold text-white truncate" title={mostActiveAsset}>{mostActiveAsset}</p>
-                    </div>
-                    <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 md:col-span-1">
-                        <p className="text-xs text-gray-500 mb-1">İşlem Sayısı</p>
-                        <p className="text-lg font-bold text-white">{transactions.length}</p>
-                    </div>
-                </div>
-
-                {/* Tablo */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                    {loading ? (
-                        <div className="flex items-center justify-center h-40 text-gray-500 text-sm">Yükleniyor...</div>
-                    ) : transactions.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-16 text-center">
-                            <div className="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center mb-4">
-                                <Inbox className="w-6 h-6 text-gray-500" />
+                        {[
+                            { label:'Başlangıç', node:<input type="date" value={filter.start_date} onChange={e=>{setPeriod('30d');setFilter(f=>({...f,start_date:e.target.value}))}} className="inp text-sm py-2"/> },
+                            { label:'Bitiş',     node:<input type="date" value={filter.end_date}   onChange={e=>{setPeriod('30d');setFilter(f=>({...f,end_date:e.target.value}))}}   className="inp text-sm py-2"/> },
+                            { label:'Varlık',    node:<select value={assetF} onChange={e=>setAssetF(e.target.value)} className="inp text-sm py-2"><option value="">Tümü</option>{assetTypes.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select> },
+                            { label:'Tip',       node:<select value={typeF}  onChange={e=>setTypeF(e.target.value as ''|'buy'|'sell')} className="inp text-sm py-2"><option value="">Tümü</option><option value="buy">Alış</option><option value="sell">Satış</option></select> },
+                        ].map(({ label, node })=>(
+                            <div key={label}>
+                                <p className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color:'var(--t3)' }}>{label}</p>
+                                {node}
                             </div>
-                            <h3 className="text-lg font-medium text-white mb-1">Rapor Boş</h3>
-                            <p className="text-gray-400 text-sm mb-6 max-w-sm">
-                                Seçtiğiniz filtreleme aralığında hiçbir işleme rastlanmadı. Tarih aralığını değiştirmeyi deneyin.
-                            </p>
+                        ))}
+                    </div>
+                </div>
+
+                {/* KPIs */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5 stagger">
+                    {kpis.map(({ l, v, icon:Icon, color, glow, bg }, i)=>(
+                        <div key={i} className="stat-card fade-up" style={{ boxShadow:`0 4px 20px ${glow}` }}>
+                            <div className="flex items-start justify-between mb-3">
+                                <p className="text-xs font-bold uppercase tracking-wider" style={{ color:'var(--t3)' }}>{l}</p>
+                                <div className="icon-chip w-8 h-8" style={{ background:bg, width:32, height:32, borderRadius:10 }}>
+                                    <Icon className="text-white" style={{ width:14, height:14 }}/>
+                                </div>
+                            </div>
+                            <p className="text-base font-black truncate" style={{ color }}>{v}</p>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Table */}
+                <div className="card overflow-hidden">
+                    {loading ? (
+                        <div className="p-6 space-y-3">{[...Array(5)].map((_,i)=><div key={i} className="skeleton h-11"/>)}</div>
+                    ) : transactions.length===0 ? (
+                        <div className="flex flex-col items-center justify-center py-20">
+                            <div className="icon-chip w-14 h-14 mb-4" style={{ background:'var(--bg-3)', width:56, height:56, borderRadius:16 }}>
+                                <Inbox className="w-6 h-6" style={{ color:'var(--t4)' }}/>
+                            </div>
+                            <p className="font-semibold text-sm mb-1" style={{ color:'var(--t1)' }}>Rapor boş</p>
+                            <p className="text-xs" style={{ color:'var(--t3)' }}>Seçilen tarih aralığında işlem yok</p>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead className="bg-gray-800/50">
-                                    <tr>
-                                        {['Tarih', 'Varlık', 'Tür', 'Miktar', 'Birim Fiyat', 'Toplam Tutar', 'Not'].map((h) => (
-                                            <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-medium">{h}</th>
-                                        ))}
-                                    </tr>
+                            <table className="tbl">
+                                <thead>
+                                    <tr>{['Tarih','Varlık','Tür','Miktar','Birim Fiyat','Toplam','Not'].map(h=>(
+                                        <th key={h}>{h}</th>
+                                    ))}</tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-800">
-                                    {transactions.map((tx) => (
-                                        <tr key={tx.id} className="hover:bg-gray-800/30 transition-colors">
-                                            <td className="px-4 py-3 text-gray-300 whitespace-nowrap">
-                                                {formatDateOnly(tx.transaction_date)}
-                                            </td>
-                                            <td className="px-4 py-3 text-white">{tx.asset_types?.name ?? '—'}</td>
-                                            <td className="px-4 py-3">
-                                                <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${tx.transaction_type === 'buy'
-                                                        ? 'bg-emerald-500/10 text-emerald-400'
-                                                        : 'bg-red-500/10 text-red-400'
-                                                    }`}>
-                                                    {tx.transaction_type === 'buy' ? 'Alış' : 'Satış'}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3 text-gray-300">{formatQuantity(Number(tx.quantity), tx.asset_types?.unit_type || 'adet')}</td>
-                                            <td className="px-4 py-3 text-gray-300">{formatCurrencyTRY(Number(tx.unit_price))}</td>
-                                            <td className="px-4 py-3 text-white font-medium">{formatCurrencyTRY(Number(tx.total_amount))}</td>
-                                            <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{tx.note ?? '—'}</td>
+                                <tbody>
+                                    {transactions.map(tx=>(
+                                        <tr key={tx.id}>
+                                            <td className="tabular-nums" style={{ color:'var(--t2)' }}>{formatDateOnly(tx.transaction_date)}</td>
+                                            <td className="font-semibold" style={{ color:'var(--t1)' }}>{tx.asset_types?.name??'—'}</td>
+                                            <td><span className={`badge ${tx.transaction_type==='buy'?'badge-green':'badge-red'}`}>{tx.transaction_type==='buy'?'↑ Alış':'↓ Satış'}</span></td>
+                                            <td style={{ color:'var(--t2)' }}>{formatQuantity(Number(tx.quantity),tx.asset_types?.unit_type||'adet')}</td>
+                                            <td style={{ color:'var(--t2)' }}>{formatCurrencyTRY(Number(tx.unit_price))}</td>
+                                            <td className="font-bold" style={{ color:'var(--t1)' }}>{formatCurrencyTRY(Number(tx.total_amount))}</td>
+                                            <td className="max-w-xs truncate" style={{ color:'var(--t4)' }}>{tx.note??'—'}</td>
                                         </tr>
                                     ))}
                                 </tbody>

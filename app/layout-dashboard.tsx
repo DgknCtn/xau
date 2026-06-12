@@ -2,22 +2,25 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { LayoutDashboard, ArrowLeftRight, BarChart2, LogOut, TrendingUp, Plus, DollarSign, Menu, X } from 'lucide-react'
+import {
+    LayoutDashboard, ArrowLeftRight, BarChart2,
+    LogOut, Plus, DollarSign, Menu, X, Coins
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useState } from 'react'
 
 const navItems = [
-    { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/transactions', label: 'İşlem Geçmişi', icon: ArrowLeftRight },
-    { href: '/prices', label: 'Güncel Fiyatlar', icon: DollarSign },
-    { href: '/reports', label: 'Raporlar', icon: BarChart2 },
+    { href: '/',             label: 'Dashboard',       icon: LayoutDashboard },
+    { href: '/transactions', label: 'İşlem Geçmişi',   icon: ArrowLeftRight   },
+    { href: '/prices',       label: 'Güncel Fiyatlar',  icon: DollarSign       },
+    { href: '/reports',      label: 'Raporlar',         icon: BarChart2        },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
-    const router = useRouter()
+    const router   = useRouter()
     const supabase = createClient()
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+    const [open, setOpen] = useState(false)
 
     const handleLogout = async () => {
         await supabase.auth.signOut()
@@ -25,96 +28,108 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
 
     return (
-        <div className="min-h-screen bg-gray-950 flex flex-col md:flex-row">
-            {/* Mobile Header */}
-            <div className="md:hidden flex items-center justify-between p-4 bg-gray-900 border-b border-gray-800 shrink-0">
-                <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg shadow-yellow-500/20">
-                        <TrendingUp className="w-4 h-4 text-gray-900" />
+        <div className="min-h-screen flex flex-col md:flex-row" style={{ background: 'var(--bg)' }}>
+
+            {/* ── Mobile header ──────────────────────── */}
+            <div className="md:hidden flex items-center justify-between px-4 py-3 shrink-0"
+                 style={{ background: 'var(--bg-2)', borderBottom: '1px solid var(--border)' }}>
+                <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-black"
+                         style={{ background: 'linear-gradient(135deg,#F59E0B,#92400E)', color: '#fff', boxShadow: '0 4px 14px rgba(245,158,11,0.35)' }}>
+                        XAU
                     </div>
-                    <p className="text-white font-semibold text-sm">Altın Portföy</p>
+                    <span className="font-bold text-sm" style={{ color: 'var(--t1)' }}>Altın Portföy</span>
                 </div>
-                <button 
-                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    className="p-2 text-gray-400 hover:text-white transition-colors"
-                >
-                    {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                <button onClick={() => setOpen(!open)} className="p-1.5 rounded-lg" style={{ color: 'var(--t3)' }}>
+                    {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
                 </button>
             </div>
 
-            {/* Sidebar Overlay */}
-            {isMobileMenuOpen && (
-                <div 
-                    className="fixed inset-0 z-40 bg-black/50 md:hidden"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                />
+            {/* ── Overlay ─────────────────────────────── */}
+            {open && (
+                <div className="fixed inset-0 z-40 md:hidden"
+                     style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}
+                     onClick={() => setOpen(false)} />
             )}
 
-            {/* Sidebar */}
-            <aside className={`
-                fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 border-r border-gray-800 flex flex-col transform transition-transform duration-300 ease-in-out
-                md:relative md:translate-x-0
-                ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-            `}>
+            {/* ── Sidebar ─────────────────────────────── */}
+            <aside
+                className={`fixed inset-y-0 left-0 z-50 flex flex-col transition-transform duration-300 ease-out
+                            md:relative md:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+                style={{
+                    width: 240,
+                    background: 'linear-gradient(180deg, #0D1525 0%, #080C18 100%)',
+                    borderRight: '1px solid var(--border)',
+                }}>
+
+                {/* Top glow accent */}
+                <div className="absolute top-0 left-0 right-0 h-px"
+                     style={{ background: 'linear-gradient(90deg, transparent, rgba(245,158,11,0.6), transparent)' }} />
+
                 {/* Logo */}
-                <div className="px-6 py-5 border-b border-gray-800">
+                <div className="px-5 pt-6 pb-5 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
                     <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-gradient-to-br from-yellow-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg shadow-yellow-500/20">
-                            <TrendingUp className="w-5 h-5 text-gray-900" />
+                        <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xs font-black shrink-0 relative overflow-hidden"
+                             style={{
+                                 background: 'linear-gradient(135deg,#F59E0B,#92400E)',
+                                 color: '#fff',
+                                 boxShadow: '0 6px 20px rgba(245,158,11,0.4)',
+                             }}>
+                            <Coins className="w-5 h-5" />
                         </div>
                         <div>
-                            <p className="text-white font-semibold text-sm">Altın Portföy</p>
-                            <p className="text-gray-500 text-xs">Takip Sistemi</p>
+                            <p className="font-bold text-sm leading-tight" style={{ color: 'var(--t1)' }}>Altın Portföy</p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--t3)' }}>Takip Sistemi</p>
                         </div>
                     </div>
                 </div>
 
-                {/* Hızlı işlem ekleme butonu */}
-                <div className="px-4 py-4">
-                    <Link
-                        href="/transactions/new"
-                        className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-gray-900 font-semibold text-sm py-2.5 rounded-xl transition-all duration-200"
-                    >
-                        <Plus className="w-4 h-4" />
-                        İşlem Ekle
+                {/* CTA */}
+                <div className="px-4 py-4 shrink-0">
+                    <Link href="/transactions/new" onClick={() => setOpen(false)}
+                          className="btn btn-gold w-full py-2.5 text-xs">
+                        <Plus className="w-3.5 h-3.5" />
+                        Yeni İşlem Ekle
                     </Link>
                 </div>
 
-                {/* Navigasyon */}
-                <nav className="flex-1 px-3 space-y-1">
+                {/* Nav label */}
+                <p className="px-5 pb-2 text-[10px] font-bold tracking-widest uppercase" style={{ color: 'var(--t4)' }}>
+                    Navigasyon
+                </p>
+
+                {/* Nav */}
+                <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto pb-4">
                     {navItems.map(({ href, label, icon: Icon }) => {
                         const active = pathname === href
                         return (
-                            <Link
-                                key={href}
-                                href={href}
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${active
-                                        ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
-                                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                                    }`}
-                            >
-                                <Icon className="w-4 h-4" />
+                            <Link key={href} href={href} onClick={() => setOpen(false)}
+                                  className={`nav-item ${active ? 'active' : ''}`}>
+                                <Icon className="w-4 h-4 shrink-0" />
                                 {label}
                             </Link>
                         )
                     })}
                 </nav>
 
-                {/* Çıkış */}
-                <div className="px-3 py-4 border-t border-gray-800">
-                    <button
-                        onClick={handleLogout}
-                        className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-150"
-                    >
-                        <LogOut className="w-4 h-4" />
+                {/* Bottom */}
+                <div className="px-3 py-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+                    <button onClick={handleLogout}
+                            className="nav-item w-full text-left"
+                            style={{ color: 'var(--t4)' }}
+                            onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background = 'var(--red-dim)'; el.style.color = 'var(--red)'; }}
+                            onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background = ''; el.style.color = 'var(--t4)'; }}>
+                        <LogOut className="w-4 h-4 shrink-0" />
                         Çıkış Yap
                     </button>
                 </div>
             </aside>
 
-            {/* İçerik */}
-            <main className="flex-1 overflow-auto">{children}</main>
+            {/* ── Main ────────────────────────────────── */}
+            <main className="flex-1 overflow-auto min-w-0"
+                  style={{ background: 'radial-gradient(ellipse 80% 50% at 50% -10%, rgba(245,158,11,0.04) 0%, transparent 70%), var(--bg)' }}>
+                {children}
+            </main>
         </div>
     )
 }
