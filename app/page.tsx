@@ -236,7 +236,7 @@ export default function DashboardPage() {
                                                         className="cursor-pointer select-none group">
                                                         <div className="flex items-center gap-1">
                                                             {l}
-                                                            {tip && <Info className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" title={tip} />}
+                                                            {tip && <span title={tip}><Info className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" /></span>}
                                                             <span className="opacity-0 group-hover:opacity-60 transition-opacity">
                                                                 {sort?.key === k
                                                                     ? sort.dir === 'asc'
